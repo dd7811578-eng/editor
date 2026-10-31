@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Retoque">
+<title>Retoque Personal</title>
+<style>
+  :root{
+    --bg:#16171A; --panel:#1F2024; --panel-2:#26272C; --line:#34353B;
+    --text:#EDEDEF; --muted:#8B8D94; --accent:#43D9C8; --accent-dim:#2B3E3C;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;overscroll-behavior:none;}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;}
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh;
+    padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);}
+  #topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+    border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0;position:relative;z-index:5;}
+  #topbar h1{font-size:15px;font-weight:600;margin:0;}
+  #topbar .actions{display:flex;gap:8px;}
+  .icon-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--panel-2);
+    color:var(--text);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;}
+  svg{pointer-events:none;}
+  .icon-btn:active{background:var(--line);}
+  .icon-btn[disabled]{opacity:.35;}
+  #stage{flex:1;min-height:200px;position:relative;background-color:#101113;overflow:hidden;}
+  #placeholder{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80%;
+    color:var(--muted);text-align:center;font-size:14px;line-height:1.6;}
+  #placeholder b{color:var(--text);display:block;font-size:16px;margin-bottom:6px;}
+  #loadBtnBig{margin-top:16px;background:var(--accent);color:#0A2622;border:none;padding:12px 22px;
+    border-radius:12px;font-weight:600;font-size:14px;cursor:pointer;}
+  #canvasHolder{position:absolute;left:0;top:0;transform-origin:0 0;display:none;touch-action:none;}
+  #canvasHolder canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block;}
+  #guides{pointer-events:none;}
+  .float-btn{position:absolute;z-index:4;width:42px;height:42px;border-radius:11px;
+    background:rgba(20,21,24,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.12);color:var(--text);display:none;align-items:center;
+    justify-content:center;font-size:17px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;}
+  .float-btn.visible{display:flex;}
+  .float-btn:active{background:rgba(67,217,200,.35);}
+  #zoomResetBtn{top:12px;right:12px;font-size:11px;font-weight:700;}
+  #compareBtn{bottom:12px;right:12px;}
+  #panel{border-top:1px solid var(--line);background:var(--panel);flex-shrink:0;}
+  #categories{display:flex;border-bottom:1px solid var(--line);}
+  .cat-btn{flex:1;padding:11px 0;text-align:center;font-size:12.5px;font-weight:600;color:var(--muted);
+    background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;}
+  .cat-btn.active{color:var(--accent);border-bottom:2px solid var(--accent);}
+  #tools{display:flex;gap:8px;padding:10px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .tool-chip{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;
+    border-radius:12px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);
+    font-size:12px;cursor:pointer;min-width:64px;}
+  .tool-chip.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+  #sliders{padding:2px 16px 6px 16px;}
+  .slider-row{display:flex;align-items:center;gap:10px;margin-top:8px;}
+  .slider-row label{font-size:11.5px;color:var(--muted);width:64px;flex-shrink:0;}
+  .slider-row input[type=range]{flex:1;accent-color:var(--accent);}
+  .slider-row .val{font-size:11.5px;width:34px;text-align:right;color:var(--text);}
+  #bandActions{display:none;gap:10px;padding:4px 16px 10px 16px;}
+  #bandActions.visible{display:flex;}
+  #bottomActions{display:flex;gap:10px;padding:0 16px 16px 16px;}
+  .btn{flex:1;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--panel-2);
+    color:var(--text);font-weight:600;font-size:13.5px;cursor:pointer;text-align:center;}
+  .btn.primary{background:var(--accent);color:#0A2622;border:none;}
+  .btn.ghost{background:none;}
+  .btn[disabled]{opacity:.35;}
+  #fileInput{display:none;}
+  #hint{font-size:11px;color:var(--muted);text-align:center;padding:0 16px 10px 16px;line-height:1.5;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <h1>Retoque Personal</h1>
+    <div class="actions">
+      <button class="icon-btn" id="undoBtn" title="Deshacer" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg></button>
+      <button class="icon-btn" id="resetBtn" title="Reiniciar" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 103-6.7"/><path d="M3 4v5h5"/></svg></button>
+      <button class="icon-btn" id="newBtn" title="Nueva foto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+  </div>
+
+  <div id="stage">
+    <div id="placeholder">
+      <b>Sin foto cargada</b>
+      Carga una selfie desde tu galería para empezar a editar.<br>Todo el procesamiento ocurre en tu teléfono.
+      <br><button id="loadBtnBig">Cargar foto</button>
+    </div>
+    <div id="canvasHolder">
+      <canvas id="work"></canvas>
+      <canvas id="guides"></canvas>
+    </div>
+    <button class="float-btn" id="zoomResetBtn" title="Restablecer vista">1:1</button>
+    <button class="float-btn" id="compareBtn" title="Mantén presionado para ver el original"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+  </div>
+
+  <input type="file" id="fileInput" accept="image/*">
+
+  <div id="panel">
+    <div id="categories">
+      <button class="cat-btn active" data-cat="rostro">Rostro</button>
+      <button class="cat-btn" data-cat="retoque">Retoque</button>
+      <button class="cat-btn" data-cat="cuerpo">Cuerpo</button>
+    </div>
+    <div id="tools"></div>
+    <div id="sliders">
+      <div class="slider-row" id="sizeRow">
+        <label>Tamaño</label>
+        <input type="range" id="sizeSlider" min="10" max="160" value="55">
+        <span class="val mono" id="sizeVal">55</span>
+      </div>
+      <div class="slider-row">
+        <label>Intensidad</label>
+        <input type="range" id="strengthSlider" min="1" max="100" value="45">
+        <span class="val mono" id="strengthVal">45</span>
+      </div>
+    </div>
+    <div id="bandActions">
+      <button class="btn ghost" id="resetZoneBtn">Reiniciar zona</button>
+      <button class="btn primary" id="applyBandBtn">Aplicar cambios</button>
+    </div>
+    <div id="hint"></div>
+    <div id="bottomActions">
+      <button class="btn primary" id="saveBtn" disabled>Guardar foto</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const TOOLS = {
+    rostro: [
+      { id:"remodelar", label:"Remodelar", kind:"warp", mode:"push", size:55, strength:40 },
+      { id:"afinar_cara", label:"Afinar", kind:"warp", mode:"pinch", size:70, strength:32 },
+    ],
+    retoque: [
+      { id:"acne", label:"Acné", kind:"smooth", blur:9, size:26, strength:70 },
+      { id:"arrugas", label:"Arrugas", kind:"smooth", blur:5, size:22, strength:55 },
+      { id:"ojeras", label:"Ojeras", kind:"brighten", size:26, strength:45 },
+      { id:"dientes", label:"Dientes", kind:"whiten", size:20, strength:55 },
+    ],
+    cuerpo: [
+      { id:"elevar", label:"Elevar", kind:"band", axis:"h", strength:45,
+        defaultLines:{a:0.55,b:0.72}, lines:{a:0.55,b:0.72} },
+      { id:"estilizar", label:"Estilizar", kind:"band", axis:"v", strength:45,
+        defaultLines:{a:0.32,b:0.68}, lines:{a:0.32,b:0.68} },
+      { id:"ampliar", label:"Ampliar", kind:"warp", mode:"bloat", size:100, strength:30 },
+    ],
+  };
+
+  let currentCat = "rostro";
+  let currentTool = TOOLS.rostro[0];
+
+  const MAX_DIM = 1400;
+  const canvas = document.getElementById("work");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const guides = document.getElementById("guides");
+  const gctx = guides.getContext("2d");
+  const placeholder = document.getElementById("placeholder");
+  const stage = document.getElementById("stage");
+  const holder = document.getElementById("canvasHolder");
+  const zoomResetBtn = document.getElementById("zoomResetBtn");
+  const compareBtn = document.getElementById("compareBtn");
+
+  let originalImageData = null;
+  let blurCache = {};
+  let undoStack = [];
+  const UNDO_LIMIT = 20;
+
+  const view = { scale:1, tx:0, ty:0 };
+  const MIN_SCALE = 1, MAX_SCALE = 6;
+
+  function applyTransform(){
+    holder.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`;
+    zoomResetBtn.classList.toggle("visible", view.scale > 1.02);
+  }
+  function fitToStage(){
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    const s = Math.min(sw / canvas.width, sh / canvas.height);
+    const fw = canvas.width * s, fh = canvas.height * s;
+    holder.style.width = fw + "px";
+    holder.style.height = fh + "px";
+    view.scale = 1;
+    view.tx = (sw - fw) / 2;
+    view.ty = (sh - fh) / 2;
+    applyTransform();
+  }
+  zoomResetBtn.addEventListener("click", fitToStage);
+
+  function decodeFile(file){
+    return new Promise((resolve, reject) => {
+      const viaReader = () => {
+        const fr = new FileReader();
+        fr.onerror = () => reject(new Error("lectura"));
+        fr.onload = () => {
+          const im = new Image();
+          im.onload = () => resolve(im);
+          im.onerror = () => reject(new Error("decodificar"));
+          im.src = fr.result;
+        };
+        fr.readAsDataURL(file);
+      };
+      if (window.createImageBitmap){
+        createImageBitmap(file, { imageOrientation: "from-image" }).then(resolve)
+          .catch(() => createImageBitmap(file).then(resolve).catch(viaReader));
+      } else viaReader();
+    });
+  }
+
+  function loadImageFile(file){
+    decodeFile(file).then(img => {
+      let w = img.width, h = img.height;
+      const scale = Math.min(1, MAX_DIM / Math.max(w, h));
+      w = Math.round(w * scale); h = Math.round(h * scale);
+      canvas.width = w; canvas.height = h;
+      guides.width = w; guides.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      originalImageData = ctx.getImageData(0, 0, w, h);
+      undoStack = []; blurCache = {};
+      placeholder.style.display = "none";
+      holder.style.display = "block";
+      compareBtn.classList.add("visible");
+      fitToStage();
+      requestAnimationFrame(fitToStage);
+      TOOLS.cuerpo.forEach(t => { if (t.kind === "band") t.lines = { ...t.defaultLines }; });
+      drawGuides();
+      document.getElementById("saveBtn").disabled = false;
+      document.getElementById("resetBtn").disabled = false;
+      document.getElementById("undoBtn").disabled = true;
+      selectTool(currentTool);
+    }).catch(() => {
+      hint.textContent = "No se pudo abrir esa foto. Prueba con otra (JPG o PNG).";
+    });
+  }
+
+  function pushUndo(){
+    if (!canvas.width) return;
+    undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    document.getElementById("undoBtn").disabled = false;
+  }
+  function undo(){
+    if (!undoStack.length) return;
+    ctx.putImageData(undoStack.pop(), 0, 0);
+    blurCache = {};
+    if (!undoStack.length) document.getElementById("undoBtn").disabled = true;
+  }
+  function resetAll(){
+    if (!originalImageData) return;
+    pushUndo();
+    ctx.putImageData(originalImageData, 0, 0);
+    blurCache = {};
+  }
+
+  function clamp(v, lo, hi){ return v < lo ? lo : (v > hi ? hi : v); }
+
+  function bilinearSample(data, w, h, x, y){
+    x = clamp(x, 0, w - 1.001); y = clamp(y, 0, h - 1.001);
+    const x0 = Math.floor(x), y0 = Math.floor(y), x1 = x0 + 1, y1 = y0 + 1;
+    const fx = x - x0, fy = y - y0;
+    const i00 = (y0*w+x0)*4, i10 = (y0*w+x1)*4, i01 = (y1*w+x0)*4, i11 = (y1*w+x1)*4;
+    const out = [0,0,0,0];
+    for (let c = 0; c < 4; c++){
+      const top = data[i00+c]*(1-fx) + data[i10+c]*fx;
+      const bot = data[i01+c]*(1-fx) + data[i11+c]*fx;
+      out[c] = top*(1-fy) + bot*fy;
+    }
+    return out;
+  }
+
+  // caída suave tipo coseno: evita picos/puntas
+  function smoothFalloff(dist, radius){
+    if (dist >= radius) return 0;
+    return 0.5 * (1 + Math.cos(Math.PI * dist / radius));
+  }
+
+  function getBlurredCanvas(radius){
+    if (blurCache[radius]) return blurCache[radius];
+    const off = document.createElement("canvas");
+    off.width = canvas.width; off.height = canvas.height;
+    const octx = off.getContext("2d");
+    octx.filter = `blur(${radius}px)`;
+    octx.drawImage(canvas, 0, 0);
+    blurCache[radius] = off;
+    return off;
+  }
+
+  function applyWarp(cx, cy, dx, dy, radius, strength, mode){
+    const w = canvas.width, h = canvas.height, r = Math.ceil(radius);
+    const minX = Math.max(0, Math.floor(cx - r)), maxX = Math.min(w-1, Math.ceil(cx + r));
+    const minY = Math.max(0, Math.floor(cy - r)), maxY = Math.min(h-1, Math.ceil(cy + r));
+    if (maxX <= minX || maxY <= minY) return;
+    const bw = maxX-minX+1, bh = maxY-minY+1;
+    const src = ctx.getImageData(minX, minY, bw, bh);
+    const out = ctx.createImageData(bw, bh);
+    const s = strength / 100;
+    for (let y = 0; y < bh; y++){
+      const gy = minY + y;
+      for (let x = 0; x < bw; x++){
+        const gx = minX + x, ddx = gx - cx, ddy = gy - cy;
+        const f = smoothFalloff(Math.sqrt(ddx*ddx + ddy*ddy), radius);
+        const oi = (y*bw + x)*4;
+        if (f <= 0){
+          out.data[oi]=src.data[oi]; out.data[oi+1]=src.data[oi+1];
+          out.data[oi+2]=src.data[oi+2]; out.data[oi+3]=src.data[oi+3];
+          continue;
+        }
+        let sx, sy;
+        if (mode === "push"){ sx = gx - dx*f*s; sy = gy - dy*f*s; }
+        else if (mode === "pinch"){ const p = f*s*0.4; sx = gx + ddx*p; sy = gy + ddy*p; }
+        else { const p = f*s*0.4; sx = gx - ddx*p; sy = gy - ddy*p; }
+        const px = bilinearSample(src.data, bw, bh, sx - minX, sy - minY);
+        out.data[oi]=px[0]; out.data[oi+1]=px[1]; out.data[oi+2]=px[2]; out.data[oi+3]=255;
+      }
+    }
+    ctx.putImageData(out, minX, minY);
+  }
+
+  function applyLocalBrush(cx, cy, radius, strength, kind, blurRadius){
+    const w = canvas.width, h = canvas.height, r = Math.ceil(radius);
+    const minX = Math.max(0, Math.floor(cx - r)), maxX = Math.min(w-1, Math.ceil(cx + r));
+    const minY = Math.max(0, Math.floor(cy - r)), maxY = Math.min(h-1, Math.ceil(cy + r));
+    if (maxX <= minX || maxY <= minY) return;
+    const bw = maxX-minX+1, bh = maxY-minY+1;
+    const base = ctx.getImageData(minX, minY, bw, bh);
+    const s = strength / 100;
+    let blurData = null;
+    if (kind === "smooth"){
+      blurData = getBlurredCanvas(blurRadius).getContext("2d").getImageData(minX, minY, bw, bh).data;
+    }
+    for (let y = 0; y < bh; y++){
+      for (let x = 0; x < bw; x++){
+        const ddx = (minX+x) - cx, ddy = (minY+y) - cy;
+        const f = smoothFalloff(Math.sqrt(ddx*ddx + ddy*ddy), radius) * s;
+        if (f <= 0) continue;
+        const i = (y*bw + x)*4;
+        let r0 = base.data[i], g0 = base.data[i+1], b0 = base.data[i+2];
+        if (kind === "smooth"){
+          r0 += (blurData[i]-r0)*f; g0 += (blurData[i+1]-g0)*f; b0 += (blurData[i+2]-b0)*f;
+        } else if (kind === "brighten"){
+          const k = f*0.55;
+          r0 += (255-r0)*k*0.8; g0 += (255-g0)*k*0.9; b0 += (255-b0)*k;
+        } else if (kind === "whiten"){
+          const k = f*0.7;
+          b0 += (255-b0)*k*1.5; r0 -= r0*k*0.12; g0 -= g0*k*0.04;
+        }
+        base.data[i]=clamp(r0,0,255); base.data[i+1]=clamp(g0,0,255); base.data[i+2]=clamp(b0,0,255);
+      }
+    }
+    ctx.putImageData(base, minX, minY);
+  }
+
+  function bandWindow(pos, a, b, margin){
+    if (pos >= a && pos <= b) return 1;
+    const t = (pos < a ? a - pos : pos - b) / margin;
+    return t > 1 ? 0 : 0.5*(1 + Math.cos(Math.PI*t));
+  }
+
+  function applyBandLift(tool){
+    const w = canvas.width, h = canvas.height;
+    let y1 = tool.lines.a*h, y2 = tool.lines.b*h;
+    if (y2 < y1) [y1, y2] = [y2, y1];
+    const bandH = Math.max(4, y2-y1), margin = bandH*0.6;
+    const top = Math.max(0, Math.floor(y1-margin)), bot = Math.min(h-1, Math.ceil(y2+margin));
+    const shift = (tool.strength/100) * bandH * 0.35;
+    pushUndo();
+    const full = ctx.getImageData(0, 0, w, h);
+    const out = ctx.createImageData(w, bot-top+1);
+    for (let y = top; y <= bot; y++){
+      const srcY = y + shift * bandWindow(y, y1, y2, margin);
+      for (let x = 0; x < w; x++){
+        const px = bilinearSample(full.data, w, h, x, srcY);
+        const oi = ((y-top)*w + x)*4;
+        out.data[oi]=px[0]; out.data[oi+1]=px[1]; out.data[oi+2]=px[2]; out.data[oi+3]=255;
+      }
+    }
+    ctx.putImageData(out, 0, top);
+    blurCache = {};
+  }
+
+  function applyBandSlim(tool){
+    const w = canvas.width, h = canvas.height;
+    let x1 = tool.lines.a*w, x2 = tool.lines.b*w;
+    if (x2 < x1) [x1, x2] = [x2, x1];
+    const bandW = Math.max(4, x2-x1), center = (x1+x2)/2, margin = bandW*0.6;
+    const left = Math.max(0, Math.floor(x1-margin)), right = Math.min(w-1, Math.ceil(x2+margin));
+    const maxPull = (tool.strength/100) * (bandW/2) * 0.35;
+    pushUndo();
+    const full = ctx.getImageData(0, 0, w, h);
+    const cols = right-left+1;
+    const out = ctx.createImageData(cols, h);
+    for (let x = left; x <= right; x++){
+      const srcX = x + maxPull * bandWindow(x, x1, x2, margin) * (x >= center ? 1 : -1);
+      for (let y = 0; y < h; y++){
+        const px = bilinearSample(full.data, w, h, srcX, y);
+        const oi = (y*cols + (x-left))*4;
+        out.data[oi]=px[0]; out.data[oi+1]=px[1]; out.data[oi+2]=px[2]; out.data[oi+3]=255;
+      }
+    }
+    ctx.putImageData(out, left, 0);
+    blurCache = {};
+  }
+
+  function drawGuides(){
+    gctx.clearRect(0, 0, guides.width, guides.height);
+    if (!currentTool || currentTool.kind !== "band" || !canvas.width) return;
+    const w = canvas.width, h = canvas.height;
+    const band = "rgba(67,217,200,0.16)", solid = "#43D9C8";
+    gctx.lineWidth = Math.max(2, w*0.0035);
+    gctx.strokeStyle = solid;
+    const hr = Math.max(6, w*0.012);
+    const horiz = currentTool.axis === "h";
+    let a = currentTool.lines.a * (horiz ? h : w), b = currentTool.lines.b * (horiz ? h : w);
+    if (b < a) [a, b] = [b, a];
+    gctx.fillStyle = band;
+    if (horiz) gctx.fillRect(0, a, w, b-a); else gctx.fillRect(a, 0, b-a, h);
+    [a, b].forEach(p => {
+      gctx.beginPath();
+      if (horiz){ gctx.moveTo(0,p); gctx.lineTo(w,p); } else { gctx.moveTo(p,0); gctx.lineTo(p,h); }
+      gctx.stroke();
+      gctx.beginPath();
+      if (horiz) gctx.arc(w/2, p, hr, 0, Math.PI*2); else gctx.arc(p, h/2, hr, 0, Math.PI*2);
+      gctx.fillStyle = solid; gctx.fill();
+    });
+  }
+
+  function hitTestBand(px, py){
+    const w = canvas.width, h = canvas.height, horiz = currentTool.axis === "h";
+    const size = horiz ? h : w, pos = horiz ? py : px;
+    const a = currentTool.lines.a*size, b = currentTool.lines.b*size;
+    const tol = Math.max(24, size*0.035);
+    const d1 = Math.abs(pos-a), d2 = Math.abs(pos-b);
+    if (d1 < tol && d1 <= d2) return "line1";
+    if (d2 < tol) return "line2";
+    if (pos > Math.min(a,b) && pos < Math.max(a,b)) return "band";
+    return "pan";
+  }
+
+  // ----- interacción: pincel, líneas, pan y pinch-zoom -----
+  const pointers = new Map();
+  let pinching = false, prevMid = null, prevDist = 1;
+  let brushDragging = false, strokeStarted = false, lastX = 0, lastY = 0;
+  let bandTarget = null, bandStartLines = null, bandStartPos = null;
+  let panning = false, panStart = null, viewStart = null;
+
+  function canvasCoords(cx, cy){
+    const r = canvas.getBoundingClientRect();
+    return { x:(cx - r.left)*canvas.width/r.width, y:(cy - r.top)*canvas.height/r.height };
+  }
+  function stageLocal(cx, cy){
+    const r = stage.getBoundingClientRect();
+    return { x:cx - r.left, y:cy - r.top };
+  }
+
+  function applyToolAt(x, y, dx, dy, t){
+    if (t.kind === "warp") applyWarp(x, y, dx, dy, t.size, t.strength, t.mode);
+    else if (t.kind === "smooth") applyLocalBrush(x, y, t.size, t.strength, "smooth", t.blur);
+    else applyLocalBrush(x, y, t.size, t.strength, t.kind);
+  }
+  function strokePoint(x, y, dx, dy){
+    if (!strokeStarted){ pushUndo(); blurCache = {}; strokeStarted = true; }
+    const t = currentTool, dist = Math.hypot(dx, dy), limit = Math.max(4, t.size*0.12);
+    if (dist > limit){
+      const n = Math.ceil(dist/limit);
+      for (let i = 1; i <= n; i++) applyToolAt(x - dx + dx*i/n, y - dy + dy*i/n, dx/n, dy/n, t);
+    } else applyToolAt(x, y, dx, dy, t);
+  }
+
+  holder.addEventListener("pointerdown", (e) => {
+    if (!canvas.width) return;
+    holder.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+    if (pointers.size === 1){
+      const c = canvasCoords(e.clientX, e.clientY);
+      if (currentTool.kind === "band"){
+        bandTarget = hitTestBand(c.x, c.y);
+        bandStartLines = { ...currentTool.lines };
+        bandStartPos = c;
+        if (bandTarget === "pan"){
+          panning = true; panStart = { x:e.clientX, y:e.clientY }; viewStart = { tx:view.tx, ty:view.ty };
+        }
+      } else {
+        brushDragging = true; strokeStarted = false; lastX = c.x; lastY = c.y;
+        strokePoint(c.x, c.y, 0, 0);
+      }
+    } else if (pointers.size === 2){
+      brushDragging = false; strokeStarted = false; bandTarget = null; panning = false;
+      const [a, b] = Array.from(pointers.values()).map(p => stageLocal(p.x, p.y));
+      prevMid = { x:(a.x+b.x)/2, y:(a.y+b.y)/2 };
+      prevDist = Math.hypot(b.x-a.x, b.y-a.y) || 1;
+      pinching = true;
+    }
+  });
+
+  holder.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
+
+    if (pinching && pointers.size === 2){
+      const [a, b] = Array.from(pointers.values()).map(p => stageLocal(p.x, p.y));
+      const mid = { x:(a.x+b.x)/2, y:(a.y+b.y)/2 };
+      const dist = Math.hypot(b.x-a.x, b.y-a.y) || 1;
+      const ns = clamp(view.scale * dist/prevDist, MIN_SCALE, MAX_SCALE);
+      const cX = (prevMid.x - view.tx)/view.scale, cY = (prevMid.y - view.ty)/view.scale;
+      view.tx = mid.x - cX*ns; view.ty = mid.y - cY*ns; view.scale = ns;
+      applyTransform();
+      prevMid = mid; prevDist = dist;
+      return;
+    }
+    if (pointers.size !== 1) return;
+
+    if (currentTool.kind === "band"){
+      if (panning){
+        view.tx = viewStart.tx + (e.clientX - panStart.x);
+        view.ty = viewStart.ty + (e.clientY - panStart.y);
+        applyTransform(); return;
+      }
+      if (!bandTarget || bandTarget === "pan") return;
+      const c = canvasCoords(e.clientX, e.clientY);
+      const horiz = currentTool.axis === "h";
+      const d = horiz ? (c.y - bandStartPos.y)/canvas.height : (c.x - bandStartPos.x)/canvas.width;
+      const L = currentTool.lines;
+      if (bandTarget === "line1") L.a = clamp(bandStartLines.a + d, 0.03, 0.97);
+      else if (bandTarget === "line2") L.b = clamp(bandStartLines.b + d, 0.03, 0.97);
+      else { L.a = clamp(bandStartLines.a + d, 0.03, 0.97); L.b = clamp(bandStartLines.b + d, 0.03, 0.97); }
+      drawGuides();
+      return;
+    }
+    if (brushDragging){
+      const c = canvasCoords(e.clientX, e.clientY);
+      strokePoint(c.x, c.y, c.x - lastX, c.y - lastY);
+      lastX = c.x; lastY = c.y;
+    }
+  });
+
+  function release(e){
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinching = false;
+    if (pointers.size === 0){ brushDragging = false; strokeStarted = false; bandTarget = null; panning = false; }
+  }
+  holder.addEventListener("pointerup", release);
+  holder.addEventListener("pointercancel", release);
+
+  // ----- UI -----
+  const toolsEl = document.getElementById("tools");
+  const sizeSlider = document.getElementById("sizeSlider"), strengthSlider = document.getElementById("strengthSlider");
+  const sizeVal = document.getElementById("sizeVal"), strengthVal = document.getElementById("strengthVal");
+  const sizeRow = document.getElementById("sizeRow"), bandActions = document.getElementById("bandActions");
+  const hint = document.getElementById("hint");
+
+  function renderTools(){
+    toolsEl.innerHTML = "";
+    TOOLS[currentCat].forEach(tool => {
+      const chip = document.createElement("button");
+      chip.className = "tool-chip" + (tool === currentTool ? " active" : "");
+      chip.innerHTML = `<span>${tool.label}</span>`;
+      chip.addEventListener("click", () => selectTool(tool));
+      toolsEl.appendChild(chip);
+    });
+  }
+  function selectTool(tool){
+    currentTool = tool;
+    strengthSlider.value = tool.strength; strengthVal.textContent = tool.strength;
+    const isBand = tool.kind === "band";
+    sizeRow.style.display = isBand ? "none" : "flex";
+    bandActions.classList.toggle("visible", isBand);
+    if (!isBand){
+      sizeSlider.value = tool.size; sizeVal.textContent = tool.size;
+      hint.textContent = "Arrastra con un dedo para editar. Con dos dedos acercas y mueves la foto.";
+    } else {
+      hint.textContent = "Separa o junta las dos líneas para definir la zona y toca “Aplicar cambios”.";
+    }
+    renderTools(); drawGuides();
+  }
+  document.querySelectorAll(".cat-btn").forEach(btn => btn.addEventListener("click", () => {
+    document.querySelectorAll(".cat-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentCat = btn.dataset.cat;
+    selectTool(TOOLS[currentCat][0]);
+  }));
+  sizeSlider.addEventListener("input", () => { currentTool.size = +sizeSlider.value; sizeVal.textContent = currentTool.size; });
+  strengthSlider.addEventListener("input", () => { currentTool.strength = +strengthSlider.value; strengthVal.textContent = currentTool.strength; });
+
+  document.getElementById("resetZoneBtn").addEventListener("click", () => {
+    currentTool.lines = { ...currentTool.defaultLines }; drawGuides();
+  });
+  document.getElementById("applyBandBtn").addEventListener("click", () => {
+    if (!canvas.width) return;
+    if (currentTool.axis === "h") applyBandLift(currentTool); else applyBandSlim(currentTool);
+  });
+
+  const fileInput = document.getElementById("fileInput");
+  document.getElementById("loadBtnBig").addEventListener("click", () => fileInput.click());
+  document.getElementById("newBtn").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", e => {
+    if (e.target.files && e.target.files[0]) loadImageFile(e.target.files[0]);
+    fileInput.value = "";
+  });
+  document.getElementById("undoBtn").addEventListener("click", undo);
+  document.getElementById("resetBtn").addEventListener("click", resetAll);
+
+  // comparar antes/después: botón flotante sobre la foto (mantener presionado)
+  let compareCache = null;
+  function showOriginal(){
+    if (!originalImageData || compareCache) return;
+    compareCache = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    ctx.putImageData(originalImageData, 0, 0);
+  }
+  function hideOriginal(){
+    if (compareCache){ ctx.putImageData(compareCache, 0, 0); compareCache = null; }
+  }
+  compareBtn.addEventListener("pointerdown", e => { e.preventDefault(); showOriginal(); });
+  ["pointerup","pointerleave","pointercancel"].forEach(ev => compareBtn.addEventListener(ev, hideOriginal));
+  compareBtn.addEventListener("contextmenu", e => e.preventDefault());
+
+  document.getElementById("saveBtn").addEventListener("click", () => {
+    canvas.toBlob(blob => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "foto-editada.jpg";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }, "image/jpeg", 0.92);
+  });
+
+  window.addEventListener("resize", () => { if (canvas.width) fitToStage(); });
+
+  renderTools();
+  selectTool(TOOLS.rostro[0]);
+})();
+</script>
+</body>
+</html>
